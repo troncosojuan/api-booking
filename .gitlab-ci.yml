@@ -1,0 +1,39 @@
+stages:
+    - build
+    - deploy
+
+build_backend:
+    stage: build
+    image:  maven:3.8.2-amazoncorretto-17
+    
+    script:
+        - cd booking-digital-api
+        - cd booking-digital-api
+        - echo "Building app..."
+        - mvn clean install
+        - echo "Finished building the app."
+    artifacts:
+        expire_in: 1 week
+        paths:
+            - booking-digital-api/booking-digital-api/target/booking-digital-0.0.1-SNAPSHOT.jar
+
+deploy_Backend:
+    stage: deploy
+    needs: [build_backend]
+    image: alpine:3.11
+    before_script:
+        - apk update && apk add openssh-client bash
+        - mkdir -p ~/.ssh
+        - chmod 700 ~/.ssh
+        - eval $(ssh-agent -s)
+        - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+        - touch ~/.ssh/config
+        - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+        - ssh-keyscan -H "$DEPLOY_SERVER_IP" >> ~/.ssh/known_hosts
+        - chmod 644 ~/.ssh/known_hosts 
+    script:
+        - echo "Deploying started..."
+        - ssh ec2-user@$DEPLOY_SERVER_IP "sudo systemctl stop g13bookingdigital.service"
+        - scp booking-digital-api/booking-digital-api/target/booking-digital-0.0.1-SNAPSHOT.jar ec2-user@$DEPLOY_SERVER_IP:/home/ec2-user/booking-digital-0.0.1-SNAPSHOT.jar
+        - ssh ec2-user@$DEPLOY_SERVER_IP "sudo systemctl start g13bookingdigital.service"
+        - echo "Finished deploying the app."
